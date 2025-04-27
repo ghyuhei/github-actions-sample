@@ -1,0 +1,448 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Parameters:
+  # ------------------------------------------------------------#
+  # Parameters
+  # ------------------------------------------------------------#
+  VPCCIDR:
+    Default: 10.0.0.0/16
+    Type: String
+
+  PublicSubnet01CIDR:
+    Default: 10.0.0.0/24
+    Type: String
+
+  PublicSubnet02CIDR:
+    Default: 10.0.1.0/24
+    Type: String
+
+  PrivateSubnet01CIDR:
+    Default: 10.0.2.0/24
+    Type: String
+
+  PrivateSubnet02CIDR:
+    Default: 10.0.3.0/24
+    Type: String
+
+  TargetGroupArn:
+    Type: String
+
+Resources:
+  # ------------------------------------------------------------#
+  # VPC
+  # ------------------------------------------------------------#
+  GithubActionsPushTestVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VPCCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: github-actions-push-test
+
+  # ------------------------------------------------------------#
+  # Subnet
+  # ------------------------------------------------------------#
+  GithubActionsPushTestPublicSubnet01:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: ap-northeast-1a
+      CidrBlock: !Ref PublicSubnet01CIDR
+      Tags:
+        - Key: Name
+          Value: github-actions-push-test-public-01
+      VpcId: !Ref GithubActionsPushTestVPC
+
+  GithubActionsPushTestPublicSubnet02:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: ap-northeast-1c
+      CidrBlock: !Ref PublicSubnet02CIDR
+      Tags:
+        - Key: Name
+          Value: github-actions-push-test-public-02
+      VpcId: !Ref GithubActionsPushTestVPC
+
+  GithubActionsPushTestPrivateSubnet01:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: ap-northeast-1a
+      CidrBlock: !Ref PrivateSubnet01CIDR
+      Tags:
+        - Key: Name
+          Value: github-actions-push-test-private-01
+      VpcId: !Ref GithubActionsPushTestVPC
+
+  GithubActionsPushTestPrivateSubnet02:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: ap-northeast-1c
+      CidrBlock: !Ref PrivateSubnet02CIDR
+      Tags:
+        - Key: Name
+          Value: github-actions-push-test-private-02
+      VpcId: !Ref GithubActionsPushTestVPC
+
+  # ------------------------------------------------------------#
+  # InternetGateway
+  # ------------------------------------------------------------#
+  GithubActionsPushTestInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: github-actions-push-test-igw
+
+  GithubActionsPushTestInternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref GithubActionsPushTestInternetGateway
+      VpcId: !Ref GithubActionsPushTestVPC
+
+  # ------------------------------------------------------------#
+  # RouteTable
+  # ------------------------------------------------------------#
+  GithubActionsPushTestPublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref GithubActionsPushTestVPC
+      Tags:
+        - Key: Name
+          Value: github-actions-push-test-public-rtb
+
+  GithubActionsPushTestPublicRouteTableRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref GithubActionsPushTestInternetGateway
+      RouteTableId: !Ref GithubActionsPushTestPublicRouteTable
+
+  GithubActionsPushTestPublicRtAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref GithubActionsPushTestPublicRouteTable
+      SubnetId: !Ref GithubActionsPushTestPublicSubnet01
+
+  GithubActionsPushTestPublicRtAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref GithubActionsPushTestPublicRouteTable
+      SubnetId: !Ref GithubActionsPushTestPublicSubnet02
+
+  GithubActionsPushTestPrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref GithubActionsPushTestVPC
+      Tags:
+        - Key: Name
+          Value: github-actions-push-test-private-rtb
+
+  GithubActionsPushTestPrivateRtAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref GithubActionsPushTestPrivateRouteTable
+      SubnetId: !Ref GithubActionsPushTestPrivateSubnet01
+
+  GithubActionsPushTestPrivateRtAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref GithubActionsPushTestPrivateRouteTable
+      SubnetId: !Ref GithubActionsPushTestPrivateSubnet02
+
+  # ------------------------------------------------------------#
+  # Security Group
+  # ------------------------------------------------------------#
+  GithubActionsPushTestALBSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: for alb
+      GroupName: github-actions-push-test-sg-alb
+      SecurityGroupIngress:
+        - FromPort: 80
+          IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          ToPort: 80
+      Tags:
+        - Key: Name
+          Value: github-actions-push-test-sg-alb
+      VpcId: !Ref GithubActionsPushTestVPC
+
+  GithubActionsPushTestECSSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: for ecs
+      GroupName: github-actions-push-test-sg-ecs
+      SecurityGroupIngress:
+        - FromPort: 80
+          IpProtocol: tcp
+          SourceSecurityGroupId: !Ref GithubActionsPushTestALBSG
+          ToPort: 80
+      Tags:
+        - Key: Name
+          Value: github-actions-push-test-sg-ecs
+      VpcId: !Ref GithubActionsPushTestVPC
+
+  GithubActionsPushTestVPCEndpointSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: for VPC Endpoint
+      GroupName: github-actions-push-test-vpc-endpoint-sg
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          FromPort: -1
+          IpProtocol: -1
+          ToPort: -1
+      SecurityGroupIngress:
+        - SourceSecurityGroupId: !Ref GithubActionsPushTestECSSG
+          FromPort: 443
+          IpProtocol: tcp
+          ToPort: 443
+      Tags:
+        - Key: Name
+          Value: github-actions-push-test-vpc-endpoint-sg
+      VpcId: !Ref GithubActionsPushTestVPC
+
+  # ------------------------------------------------------------#
+  # VPC Endpoint
+  # ------------------------------------------------------------#
+  GithubActionsPushTestS3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      RouteTableIds:
+        - !Ref GithubActionsPushTestPrivateRouteTable
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcEndpointType: Gateway
+      VpcId: !Ref GithubActionsPushTestVPC
+
+  GithubActionsPushTestECRdkrEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecr.dkr
+      VpcId: !Ref GithubActionsPushTestVPC
+      SubnetIds:
+        - !Ref GithubActionsPushTestPrivateSubnet01
+        - !Ref GithubActionsPushTestPrivateSubnet02
+      SecurityGroupIds:
+        - !Ref GithubActionsPushTestVPCEndpointSG
+
+  GithubActionsPushTestECRapiEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecr.api
+      VpcId: !Ref GithubActionsPushTestVPC
+      SubnetIds:
+        - !Ref GithubActionsPushTestPrivateSubnet01
+        - !Ref GithubActionsPushTestPrivateSubnet02
+      SecurityGroupIds:
+        - !Ref GithubActionsPushTestVPCEndpointSG
+
+  GithubActionsPushTestLogsEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.logs
+      VpcId: !Ref GithubActionsPushTestVPC
+      SubnetIds:
+        - !Ref GithubActionsPushTestPrivateSubnet01
+        - !Ref GithubActionsPushTestPrivateSubnet02
+      SecurityGroupIds:
+        - !Ref GithubActionsPushTestVPCEndpointSG
+
+  GithubActionsPushTestSsmMessagesEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssmmessages
+      VpcId: !Ref GithubActionsPushTestVPC
+      SubnetIds:
+        - !Ref GithubActionsPushTestPrivateSubnet01
+        - !Ref GithubActionsPushTestPrivateSubnet02
+      SecurityGroupIds:
+        - !Ref GithubActionsPushTestVPCEndpointSG
+
+  # ------------------------------------------------------------#
+  # ALB
+  # ------------------------------------------------------------#
+  GithubActionsPushTestALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      IpAddressType: ipv4
+      Name: github-actions-push-test-alb
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref GithubActionsPushTestALBSG
+      Subnets:
+        - !Ref GithubActionsPushTestPublicSubnet01
+        - !Ref GithubActionsPushTestPublicSubnet02
+      Tags:
+        - Key: Name
+          Value: github-actions-push-test-alb
+      Type: application
+
+  GithubActionsPushTestTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckEnabled: true
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: /
+      HealthCheckPort: 80
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 5
+      IpAddressType: ipv4
+      Matcher:
+        HttpCode: 200
+      Name: github-actions-push-test-tg
+      Port: 80
+      Protocol: HTTP
+      ProtocolVersion: HTTP1
+      Tags:
+        - Key: Name
+          Value: github-actions-push-test-tg
+      TargetType: ip
+      UnhealthyThresholdCount: 2
+      VpcId: !Ref GithubActionsPushTestVPC
+
+  GithubActionsPushTestALBHTTPListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref GithubActionsPushTestTargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref GithubActionsPushTestALB
+      Port: 80
+      Protocol: HTTP
+
+  # ------------------------------------------------------------#
+  # ECR
+  # ------------------------------------------------------------#
+  #GithubActionsPushTestECR:
+  #  Type: AWS::ECR::Repository
+  #  Properties:
+  #    EmptyOnDelete: true
+  #    EncryptionConfiguration:
+  #      EncryptionType: AES256
+  #    RepositoryName: github-actions-push-test-ecr
+
+  # ------------------------------------------------------------#
+  # CloudWatch Logs
+  # ------------------------------------------------------------#
+  GithubActionsPushTestECSLogGroup:
+    Type: "AWS::Logs::LogGroup"
+    Properties:
+      LogGroupName: !Sub "/ecs/logs/github-actions-push-test-log"
+
+  # ------------------------------------------------------------#
+  # IAM
+  # ------------------------------------------------------------#
+  GithubActionsPushTestTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      RoleName: github-actions-push-test-task-execution-role
+
+  GithubActionsPushTestTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      RoleName: github-actions-push-test-task-role
+
+  GithubActionsPushTestTaskRolePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: github-actions-push-test-task-role-policy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - "ssmmessages:CreateControlChannel"
+              - "ssmmessages:CreateDataChannel"
+              - "ssmmessages:OpenControlChannel"
+              - "ssmmessages:OpenDataChannel"
+            Resource: "*"
+      Roles:
+        - !Ref GithubActionsPushTestTaskRole
+
+  # ------------------------------------------------------------#
+  # ECS
+  # ------------------------------------------------------------#
+  GithubActionsPushTestECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      CapacityProviders:
+        - FARGATE
+      ClusterName: github-actions-push-test-cluster
+      DefaultCapacityProviderStrategy:
+        - CapacityProvider: FARGATE
+          Weight: 1
+
+  GithubActionsPushTestECSTaskDef:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      ContainerDefinitions:
+        - Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/github-actions-push-test-ecr:latest
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: "/ecs/logs/github-actions-push-test-log"
+              awslogs-region: !Ref "AWS::Region"
+              awslogs-stream-prefix: "github-actions-push-test-log"
+          Name: github-actions-push-test-task
+          PortMappings:
+            - ContainerPort: 80
+              HostPort: 80
+      Cpu: 256
+      ExecutionRoleArn: !Ref GithubActionsPushTestTaskExecutionRole
+      Family: github-actions-push-test-task-def
+      Memory: 512
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      TaskRoleArn: !Ref GithubActionsPushTestTaskRole
+
+  GithubActionsPushTestECSService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref GithubActionsPushTestECSCluster
+      DesiredCount: 1
+      EnableExecuteCommand: true
+      LoadBalancers:
+        - ContainerName: github-actions-push-test-task
+          ContainerPort: 80
+          TargetGroupArn: !Ref GithubActionsPushTestTargetGroup
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          SecurityGroups:
+            - !Ref GithubActionsPushTestECSSG
+          Subnets:
+            - !Ref GithubActionsPushTestPrivateSubnet01
+            - !Ref GithubActionsPushTestPrivateSubnet02
+      ServiceName: github-actions-push-test-service
+      TaskDefinition: !Ref GithubActionsPushTestECSTaskDef
+    DependsOn: GithubActionsPushTestALBHTTPListener

@@ -1,0 +1,44 @@
+name: push image to ECR and deploy to ECS
+on:
+  push:
+    branches:
+      - developer
+    paths:
+      - app/**
+jobs:
+  push:
+    name: push image to ECR and deploy to ECS
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-region: "ap-northeast-1"
+          role-to-assume: "arn:aws:iam::{acccountID}:role/github-actions-ecr-push-test" #変更してください ロール名
+
+      - uses: aws-actions/amazon-ecr-login@v1
+        id: login-ecr
+
+      - name: Build, tag, and push docker image to ECR
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPOSITORY: "github-actions-push-test-ecr" #変更してください ECRのリポジトリ名
+          IMAGE_TAG: "latest" # ${{ github.sha }}
+        run: |
+          docker build -f ./app/Dockerfile -t ${{ env.REGISTRY }}/${{ env.REPOSITORY }}:${{ env.IMAGE_TAG }} .
+          docker tag ${{ env.REGISTRY }}/${{ env.REPOSITORY }}:${{ env.IMAGE_TAG }} ${{ env.REGISTRY }}/${{ env.REPOSITORY }}:latest
+          docker push ${{ env.REGISTRY }}/${{ env.REPOSITORY }}:${{ env.IMAGE_TAG }}
+
+      - name: Force new deployment and wait for services stability in ECS
+        env:
+          CLUSTER_NAME: "github-actions-push-test-cluster" #変更してください クラスター名
+          SERVICE_NAME: "github-actions-push-test-service" #変更してください サービス名
+        run: |
+          aws ecs update-service --cluster ${{ env.CLUSTER_NAME }} --service ${{ env.SERVICE_NAME }} --force-new-deployment
+          aws ecs wait services-stable --cluster ${{ env.CLUSTER_NAME }} --service ${{ env.SERVICE_NAME }}
+          aws ecs describe-services --cluster ${{ env.CLUSTER_NAME }} --service ${{ env.SERVICE_NAME }}
